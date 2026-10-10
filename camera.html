@@ -1,0 +1,202 @@
+```html
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kamera Absensi Pobo Donut</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: Arial, sans-serif;
+      background: #f1f4f8;
+      color: #14213d;
+    }
+
+    .card {
+      max-width: 500px;
+      margin: 20px auto;
+      padding: 24px;
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 8px 30px #0001;
+    }
+
+    h1 { font-size: 26px; }
+
+    video, canvas {
+      display: block;
+      width: 100%;
+      border-radius: 12px;
+      background: #111;
+      margin: 16px 0;
+    }
+
+    canvas { display: none; }
+
+    button {
+      width: 100%;
+      padding: 15px;
+      margin: 6px 0;
+      border: 0;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      background: #176b4d;
+      color: white;
+    }
+
+    button:disabled { opacity: .5; cursor: not-allowed; }
+
+    #status {
+      padding: 14px;
+      background: #eef2f7;
+      border-radius: 10px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+
+    .secondary { background: #263e6b; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Kamera Absensi Pobo Donut</h1>
+    <p>Ambil foto langsung dari kamera. Galeri tidak digunakan.</p>
+
+    <div id="status">Menyiapkan kamera...</div>
+
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas"></canvas>
+
+    <button id="capture" disabled>Ambil Foto</button>
+    <button id="retake" class="secondary" hidden>Ulangi Foto</button>
+    <button id="send" disabled>Gunakan Foto</button>
+  </main>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const statusBox = document.getElementById('status');
+    const captureBtn = document.getElementById('capture');
+    const retakeBtn = document.getElementById('retake');
+    const sendBtn = document.getElementById('send');
+
+    let stream = null;
+    let photoData = null;
+
+    function setStatus(message) {
+      statusBox.textContent = message;
+    }
+
+    async function startCamera() {
+      try {
+        if (!navigator.mediaDevices ||
+            !navigator.mediaDevices.getUserMedia) {
+          throw new Error(
+            'Browser tidak mendukung akses kamera langsung.'
+          );
+        }
+
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'user' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        });
+
+        video.srcObject = stream;
+        await video.play();
+
+        captureBtn.disabled = false;
+        setStatus('Kamera aktif. Silakan ambil foto.');
+      } catch (error) {
+        setStatus(
+          'Kamera gagal dibuka: ' + error.name +
+          ' | ' + error.message +
+          '. Pastikan izin kamera diberikan pada browser.'
+        );
+      }
+    }
+
+    captureBtn.addEventListener('click', () => {
+      if (!video.videoWidth) {
+        setStatus('Kamera belum siap. Coba lagi.');
+        return;
+      }
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      canvas.getContext('2d').drawImage(
+        video, 0, 0, canvas.width, canvas.height
+      );
+
+      photoData = canvas.toDataURL('image/jpeg', 0.75);
+
+      video.style.display = 'none';
+      canvas.style.display = 'block';
+      captureBtn.hidden = true;
+      retakeBtn.hidden = false;
+      sendBtn.disabled = false;
+
+      setStatus('Foto berhasil diambil. Periksa foto sebelum melanjutkan.');
+    });
+
+    retakeBtn.addEventListener('click', () => {
+      photoData = null;
+      canvas.style.display = 'none';
+      video.style.display = 'block';
+      captureBtn.hidden = false;
+      retakeBtn.hidden = true;
+      sendBtn.disabled = true;
+
+      setStatus('Silakan ambil foto ulang.');
+    });
+
+    sendBtn.addEventListener('click', () => {
+      if (!photoData) return;
+
+      if (!window.opener || window.opener.closed) {
+        setStatus(
+          'Halaman absensi utama tidak ditemukan. ' +
+          'Buka kamera melalui tombol di halaman absensi.'
+        );
+        return;
+      }
+
+      sendBtn.disabled = true;
+      setStatus('Mengirim foto ke halaman absensi...');
+
+      window.opener.postMessage({
+        type: 'POBO_ATTENDANCE_PHOTO',
+        photoData: photoData
+      }, '*');
+
+      setStatus(
+        'Foto dikirim. Silakan kembali ke halaman absensi.'
+      );
+
+      stopCamera();
+    });
+
+    function stopCamera() {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+      }
+    }
+
+    window.addEventListener('beforeunload', stopCamera);
+
+    startCamera();
+  </script>
+</body>
+</html>
+```
